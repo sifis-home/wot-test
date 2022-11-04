@@ -17,6 +17,14 @@ impl From<String> for CowStr {
     }
 }
 
+impl Deref for CowStr {
+    type Target = Cow<'static, str>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Deserialize)]
 pub(crate) enum SecurityScheme {
     #[serde(rename = "nosec")]
@@ -137,6 +145,8 @@ pub(crate) struct ActionAffordance {
     pub(crate) input: Option<DataSchema>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) output: Option<DataSchema>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) synchronous: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -232,6 +242,7 @@ impl PartialEq for ActionAffordance {
             .is_equivalent(&other.interaction, &[Operation::InvokeAction])
             && are_equivalent_opt_data_schema(&self.input, &other.input)
             && are_equivalent_opt_data_schema(&self.output, &other.output)
+            && self.synchronous == other.synchronous
     }
 }
 

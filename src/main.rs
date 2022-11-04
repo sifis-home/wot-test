@@ -27,6 +27,7 @@ struct Cli {
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum WotTest {
     Lamp,
+    OnOffSwitch,
 }
 
 #[tokio::main(flavor = "current_thread")]

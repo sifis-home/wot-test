@@ -27,7 +27,10 @@ use tokio::{
 use tracing::{error, info, warn};
 
 use crate::{
-    lamp::Brightness, td::ThingDescription, tester::lamp::handle_lamp_event_result, WotTest,
+    lamp::Brightness,
+    td::{DataSchemaSubtype, Operation, ThingDescription},
+    tester::lamp::handle_lamp_event_result,
+    WotTest,
 };
 
 pub(crate) struct Tester {
@@ -69,6 +72,7 @@ impl Tester {
     pub(crate) async fn test(&self, test: WotTest) -> eyre::Result<()> {
         match test {
             WotTest::Lamp => self.test_lamp().await,
+            WotTest::OnOffSwitch => self.test_on_off_switch().await,
         }
     }
 
@@ -493,6 +497,208 @@ impl Tester {
                 }
             }
         }
+    }
+
+    pub(crate) async fn test_on_off_switch(&self) -> eyre::Result<()> {
+        let (status, _, thing) = self
+            .request(Method::GET, ".well-known/wot")
+            .json::<ThingDescription>()
+            .await?;
+        ensure!(
+            status == StatusCode::OK,
+            "Expected OK status code, got {status}",
+        );
+        ensure!(
+            thing.attype.contains(&"OnOffSwitch".into()),
+            "An on-off switch requires an \"OnOffSwitch\" @type",
+        );
+        let on_off_property = thing
+            .properties
+            .values()
+            .find(|property| &*property.human_readable.attype == "OnOffProperty")
+            .ok_or(eyre!("Missing OnOffProperty type from on-off-switch thing"))?;
+        let on_form = on_off_property
+            .interaction
+            .forms
+            .iter()
+            .find(|form| {
+                form.subprotocol.is_none()
+                    && form
+                        .op
+                        .as_ref()
+                        .map(|op| {
+                            op.contains(&Operation::ReadProperty)
+                                && op.contains(&Operation::WriteProperty)
+                        })
+                        .unwrap_or(true)
+            })
+            .ok_or(eyre!(
+                "Missing ReadProperty+WriteProperty form for on-off switch property"
+            ))?;
+        ensure!(
+            matches!(
+                on_off_property.data_schema.subtype,
+                DataSchemaSubtype::Boolean
+            ),
+            "On-off switch data schema must be a boolean type",
+        );
+        ensure!(
+            on_off_property.data_schema.unit.is_empty(),
+            "On-off switch data schema must have a nullable/empty unit",
+        );
+        ensure!(
+            matches!(on_off_property.data_schema.read_only, None | Some(false)),
+            "On-off switch data schema must have a null, undefined or false \"read_only\" field",
+        );
+        ensure!(
+            matches!(on_off_property.data_schema.write_only, None | Some(false)),
+            "On-off switch data schema must have a null, undefined or false \"write_only\" field",
+        );
+        info!("Got on-off-switch TD from .well-known/wot");
+
+        let turn_off = || async {
+            let (status, _) = self
+                .request_with_json(Method::PUT, &on_form.href, &false)
+                .await?;
+            ensure!(
+                status == StatusCode::NO_CONTENT,
+                "Expected NO_CONTENT status code, got {status}",
+            );
+
+            let (status, _, is_on) = self
+                .request(Method::GET, &on_form.href)
+                .json::<bool>()
+                .await?;
+            ensure!(
+                status == StatusCode::OK,
+                "Expected OK status code, got {status}",
+            );
+            ensure!(
+                is_on.not(),
+                "On-off-switch thing is expected to be off but it is on",
+            );
+            info!("On-off-switch thing is off as expected");
+
+            Ok(())
+        };
+
+        let turn_on = || async {
+            let (status, _) = self
+                .request_with_json(Method::PUT, &on_form.href, &true)
+                .await?;
+            ensure!(
+                status == StatusCode::NO_CONTENT,
+                "Expected NO_CONTENT status code, got {status}",
+            );
+
+            let (status, _, is_on) = self
+                .request(Method::GET, &on_form.href)
+                .json::<bool>()
+                .await?;
+            ensure!(
+                status == StatusCode::OK,
+                "Expected OK status code, got {status}",
+            );
+            ensure!(
+                is_on,
+                "On-off-switch thing is expected to be on but it is off",
+            );
+            info!("On-off-switch thing is on as expected");
+
+            Ok(())
+        };
+
+        let (status, _, initial_is_on) = self
+            .request(Method::GET, &on_form.href)
+            .json::<bool>()
+            .await?;
+        ensure!(
+            status == StatusCode::OK,
+            "Expected OK status code, got {status}",
+        );
+
+        if initial_is_on {
+            turn_off().await?;
+            turn_on().await?;
+        } else {
+            turn_on().await?;
+            turn_off().await?;
+        }
+
+        if let Some(toggle_action) = thing
+            .actions
+            .values()
+            .find(|action| &*action.interaction.human_readable.attype == "ToggleAction")
+        {
+            info!("Found ToggleAction on On-Off-switch thing, testing it");
+
+            let invoke_action = toggle_action
+                .interaction
+                .interaction
+                .forms
+                .iter()
+                .find(|form| {
+                    form.subprotocol.is_none()
+                        && form
+                            .op
+                            .as_ref()
+                            .map(|ops| ops.contains(&Operation::InvokeAction))
+                            .unwrap_or(true)
+                })
+                .ok_or(eyre!("Unable to find invoke action form for Toggle Action"))?;
+            ensure!(
+                toggle_action.synchronous == Some(true),
+                "Expected toggle action synchronous to be true",
+            );
+            ensure!(
+                toggle_action.input.is_none(),
+                "Expected toggle action input to be null or undefined",
+            );
+            ensure!(
+                toggle_action.output.is_none(),
+                "Expected toggle action output to be null or undefined",
+            );
+
+            let toggle = || async {
+                let (status, _) = self.request(Method::POST, &invoke_action.href).await?;
+                ensure!(
+                    status == StatusCode::OK,
+                    "Expected OK status code, got {status}",
+                );
+
+                Ok(())
+            };
+
+            toggle().await?;
+            let (status, _, is_on) = self
+                .request(Method::GET, &on_form.href)
+                .json::<bool>()
+                .await?;
+            ensure!(
+                status == StatusCode::OK,
+                "Expected OK status code, got {status}",
+            );
+            ensure!(
+                is_on != initial_is_on,
+                "Expected toggle action to switch the on/off status"
+            );
+
+            toggle().await?;
+            let (status, _, is_on) = self
+                .request(Method::GET, &on_form.href)
+                .json::<bool>()
+                .await?;
+            ensure!(
+                status == StatusCode::OK,
+                "Expected OK status code, got {status}",
+            );
+            ensure!(
+                is_on == initial_is_on,
+                "Expected toggle action to restore the on/off status"
+            );
+        }
+
+        Ok(())
     }
 
     fn request(&self, method: Method, endpoint: &str) -> RequestHandler {
