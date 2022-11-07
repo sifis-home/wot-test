@@ -184,7 +184,7 @@ pub(crate) static DESCRIPTION: Lazy<ThingDescription> = Lazy::new(|| ThingDescri
             },
             data: Some(DataSchema {
                 data_schema: PartialDataSchema {
-                    subtype: DataSchemaSubtype::Number,
+                    subtype: DataSchemaSubtype::Number(Default::default()),
                     unit: "degree celsius".into(),
                     read_only: Default::default(),
                     write_only: Default::default(),

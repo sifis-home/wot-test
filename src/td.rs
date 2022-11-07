@@ -276,7 +276,7 @@ pub(crate) struct Form {
     pub(crate) subprotocol: Option<CowStr>,
 }
 
-#[derive(Debug, Eq, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize)]
 pub(crate) struct DataSchema {
     #[serde(flatten)]
     pub(crate) data_schema: PartialDataSchema,
@@ -284,7 +284,7 @@ pub(crate) struct DataSchema {
     pub(crate) human_readable: HumanReadable,
 }
 
-#[derive(Debug, Eq, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PartialDataSchema {
     #[serde(flatten)]
@@ -346,13 +346,13 @@ fn are_equivalent_opt_data_schema(left: &Option<DataSchema>, right: &Option<Data
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub(crate) enum DataSchemaSubtype {
     Object(ObjectDataSchema),
     Array,
     String,
-    Number,
+    Number(NumberDataSchema),
     Integer(IntegerDataSchema),
     Boolean,
     Null,
@@ -363,9 +363,9 @@ impl DataSchemaSubtype {
         match (self, other) {
             (Self::Object(a), Self::Object(b)) => a.is_equivalent(b),
             (Self::Integer(a), Self::Integer(b)) => a == b,
+            (Self::Number(a), Self::Number(b)) => a == b,
             (Self::Array, Self::Array)
             | (Self::String, Self::String)
-            | (Self::Number, Self::Number)
             | (Self::Boolean, Self::Boolean)
             | (Self::Null, Self::Null) => true,
             _ => false,
@@ -381,7 +381,15 @@ pub(crate) struct IntegerDataSchema {
     pub(crate) maximum: Option<i64>,
 }
 
-#[derive(Debug, Default, Eq, PartialEq, Deserialize)]
+#[derive(Debug, Default, PartialEq, Deserialize)]
+pub(crate) struct NumberDataSchema {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) minimum: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) maximum: Option<f64>,
+}
+
+#[derive(Debug, Default, PartialEq, Deserialize)]
 pub(crate) struct ObjectDataSchema {
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub(crate) properties: HashMap<CowStr, DataSchema>,

@@ -28,6 +28,7 @@ struct Cli {
 enum WotTest {
     Lamp,
     OnOffSwitch,
+    LightEmitter,
 }
 
 #[tokio::main(flavor = "current_thread")]
