@@ -69,10 +69,10 @@ impl Tester {
         Self { host, port, client }
     }
 
-    pub(crate) async fn test(&self, test: WotTest) -> eyre::Result<()> {
+    pub(crate) async fn test(&self, test: WotTest, hazards: bool) -> eyre::Result<()> {
         match test {
             WotTest::Lamp => self.test_lamp().await,
-            WotTest::OnOffSwitch => self.test_on_off_switch().await,
+            WotTest::OnOffSwitch => self.test_on_off_switch(hazards).await,
         }
     }
 
@@ -499,7 +499,7 @@ impl Tester {
         }
     }
 
-    pub(crate) async fn test_on_off_switch(&self) -> eyre::Result<()> {
+    pub(crate) async fn test_on_off_switch(&self, hazards: bool) -> eyre::Result<()> {
         let (status, _, thing) = self
             .request(Method::GET, ".well-known/wot")
             .json::<ThingDescription>()

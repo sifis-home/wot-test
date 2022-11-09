@@ -1,6 +1,9 @@
 use std::{borrow::Cow, collections::HashMap, ops::Deref};
 
-use serde::{Deserialize, Deserializer};
+use serde::{
+    de::{self, Visitor},
+    Deserialize, Deserializer,
+};
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize)]
 pub(crate) struct CowStr(Cow<'static, str>);
@@ -117,6 +120,13 @@ impl<T> From<T> for OneOrMany<T> {
 pub(crate) struct PartialInteractionAffordance {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub(crate) forms: Vec<Form>,
+
+    #[serde(
+        skip_serializing_if = "Vec::is_empty",
+        default,
+        deserialize_with = "deserialize_hazards"
+    )]
+    pub(crate) hazards: Vec<Hazard>,
 }
 
 #[derive(Debug, Default, Eq, PartialEq, Deserialize)]
@@ -426,4 +436,48 @@ pub(crate) enum Operation {
     SubscribeAllEvents,
     UnsubscribeAllEvents,
     QueryAllActions,
+}
+
+#[derive(Debug, Default, Eq, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct Hazard {
+    pub(crate) id: CowStr,
+    pub(crate) risk_level: u8,
+    pub(crate) name: CowStr,
+    pub(crate) description: CowStr,
+    pub(crate) json_path: CowStr,
+    pub(crate) category: CowStr,
+}
+
+fn deserialize_hazards<'de, D>(deserializer: D) -> Result<Vec<Hazard>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct V;
+    impl<'de> Visitor<'de> for V {
+        type Value = Vec<Hazard>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a sequence of hazards")
+        }
+
+        fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: de::SeqAccess<'de>,
+        {
+            let mut out = match seq.size_hint() {
+                Some(size) => Vec::with_capacity(size),
+                None => Vec::new(),
+            };
+
+            while let Some(result) = seq.next_element().transpose() {
+                if let Ok(element) = result {
+                    out.push(element);
+                }
+            }
+            Ok(out)
+        }
+    }
+
+    deserializer.deserialize_seq(V)
 }

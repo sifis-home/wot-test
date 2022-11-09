@@ -22,6 +22,9 @@ struct Cli {
     /// The Things to test.
     #[clap(value_enum)]
     tests: Vec<WotTest>,
+
+    /// Also test Sifis hazards when possible.
+    hazards: bool,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -34,13 +37,18 @@ enum WotTest {
 async fn main() -> eyre::Result<()> {
     tracing_subscriber::fmt::init();
     stable_eyre::install()?;
-    let Cli { host, port, tests } = Cli::parse();
+    let Cli {
+        host,
+        port,
+        tests,
+        hazards,
+    } = Cli::parse();
 
     let host = host.map(Cow::Owned).unwrap_or(Cow::Borrowed("localhost"));
 
     let tester = Tester::new(host, port);
     for test in tests {
-        tester.test(test).await?;
+        tester.test(test, hazards).await?;
     }
 
     info!("Everything seems fine");
