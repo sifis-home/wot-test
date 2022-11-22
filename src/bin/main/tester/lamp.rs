@@ -16,7 +16,7 @@ use stable_eyre::eyre::{self, bail, ensure, eyre, Context};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
-use wot_test::tester::{ActionResponse, ActionResponseStatus};
+use wot_test::tester::{ActionResponse, ActionResponseStatus, Requester};
 
 use super::Tester;
 
