@@ -12,7 +12,7 @@ use futures_util::{pin_mut, StreamExt};
 use http_api_problem::StatusCode;
 use reqwest::{header::LOCATION, Client, Method};
 use serde::{Deserialize, Serialize};
-use stable_eyre::eyre::{self, bail, ensure, eyre};
+use stable_eyre::eyre::{self, bail, ensure, eyre, Report};
 use tokio::{
     join, select,
     sync::{mpsc, oneshot},
@@ -23,7 +23,10 @@ use wot_test::{
     td::{
         DataSchemaSubtype, Form, IntegerDataSchema, NumberDataSchema, Operation, ThingDescription,
     },
-    tester::{self, check_no_incoming_messages, ActionResponse, ActionResponseStatus, Requester},
+    tester::{
+        self, check_no_incoming_messages, test_property, ActionResponse, ActionResponseStatus,
+        Requester,
+    },
 };
 
 use crate::{lamp::Brightness, tester::lamp::handle_lamp_event_result, WotTest};
@@ -496,55 +499,19 @@ impl Tester {
         on_form: &Form,
     ) -> eyre::Result<()> {
         let turn_off = || async {
-            let (status, _) = self
-                .request_with_json(Method::PUT, &on_form.href, &false)
-                .await?;
-            ensure!(
-                status == StatusCode::NO_CONTENT,
-                "Expected NO_CONTENT status code, got {status}",
-            );
+            test_property(self, on_form, &false).await?;
 
-            let (status, _, is_on) = self
-                .request(Method::GET, &on_form.href)
-                .json::<bool>()
-                .await?;
-            ensure!(
-                status == StatusCode::OK,
-                "Expected OK status code, got {status}",
-            );
-            ensure!(
-                is_on.not(),
-                "On-off-switch thing is expected to be off but it is on",
-            );
             info!("On-off-switch thing is off as expected");
 
-            Ok(())
+            Ok::<(), Report>(())
         };
 
         let turn_on = || async {
-            let (status, _) = self
-                .request_with_json(Method::PUT, &on_form.href, &true)
-                .await?;
-            ensure!(
-                status == StatusCode::NO_CONTENT,
-                "Expected NO_CONTENT status code, got {status}",
-            );
+            test_property(self, on_form, &true).await?;
 
-            let (status, _, is_on) = self
-                .request(Method::GET, &on_form.href)
-                .json::<bool>()
-                .await?;
-            ensure!(
-                status == StatusCode::OK,
-                "Expected OK status code, got {status}",
-            );
-            ensure!(
-                is_on,
-                "On-off-switch thing is expected to be on but it is off",
-            );
             info!("On-off-switch thing is on as expected");
 
-            Ok(())
+            Ok::<(), Report>(())
         };
 
         let (status, _, initial_is_on) = self

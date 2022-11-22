@@ -8,9 +8,11 @@ use futures_util::{future::BoxFuture, FutureExt};
 use http_api_problem::HttpApiProblem;
 use reqwest::{header::HeaderMap, Client, Method, RequestBuilder, StatusCode};
 use serde::{Deserialize, Serialize};
-use stable_eyre::eyre::{self, bail, eyre};
+use stable_eyre::eyre::{self, bail, ensure, eyre};
 use time::OffsetDateTime;
 use tokio::{select, sync::mpsc};
+
+use crate::td::Form;
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -136,4 +138,34 @@ pub trait Requester {
 
         self.client().request(method, url)
     }
+}
+
+pub async fn test_property<R, T>(requester: &R, form: &Form, value: &T) -> eyre::Result<()>
+where
+    R: Requester,
+    T: Serialize + Sized + PartialEq + fmt::Debug + for<'de> Deserialize<'de>,
+{
+    let (status, _) = requester
+        .request_with_json(Method::PUT, &form.href, value)
+        .await?;
+    ensure!(
+        status == StatusCode::NO_CONTENT,
+        "Expected NO_CONTENT status code, got {status}",
+    );
+
+    let (status, _, read) = requester
+        .request(Method::GET, &form.href)
+        .json::<T>()
+        .await?;
+    ensure!(
+        status == StatusCode::OK,
+        "Expected OK status code, got {status}",
+    );
+
+    ensure!(
+        read == *value,
+        "Value not set correctly, got {read:?} instead of {value:?}",
+    );
+
+    Ok(())
 }
