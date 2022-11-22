@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::HashMap, ops::Deref};
 use serde::{Deserialize, Deserializer};
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize)]
-pub(crate) struct CowStr(Cow<'static, str>);
+pub struct CowStr(Cow<'static, str>);
 
 impl From<&'static str> for CowStr {
     fn from(s: &'static str) -> Self {
@@ -26,43 +26,43 @@ impl Deref for CowStr {
 }
 
 #[derive(Debug, Eq, PartialEq, Deserialize)]
-pub(crate) enum SecurityScheme {
+pub enum SecurityScheme {
     #[serde(rename = "nosec")]
     NoSecurityScheme,
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ThingDescription {
+pub struct ThingDescription {
     #[serde(default)]
-    pub(crate) id: CowStr,
+    pub id: CowStr,
     #[serde(default)]
-    pub(crate) title: CowStr,
+    pub title: CowStr,
     #[serde(default)]
-    pub(crate) security: CowStr,
-    pub(crate) security_definitions: HashMap<CowStr, SecuritySchemeDefinition>,
+    pub security: CowStr,
+    pub security_definitions: HashMap<CowStr, SecuritySchemeDefinition>,
     #[serde(rename = "@type")]
-    pub(crate) attype: OneOrMany<CowStr>,
+    pub attype: OneOrMany<CowStr>,
     #[serde(default)]
-    pub(crate) description: CowStr,
+    pub description: CowStr,
     #[serde(default)]
-    pub(crate) properties: HashMap<CowStr, PropertyAffordance>,
+    pub properties: HashMap<CowStr, PropertyAffordance>,
     #[serde(default)]
-    pub(crate) actions: HashMap<CowStr, ActionAffordance>,
+    pub actions: HashMap<CowStr, ActionAffordance>,
     #[serde(default)]
-    pub(crate) events: HashMap<CowStr, EventAffordance>,
+    pub events: HashMap<CowStr, EventAffordance>,
     #[serde(default)]
-    pub(crate) forms: Vec<Form>,
+    pub forms: Vec<Form>,
 }
 
 #[derive(Debug, Eq, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SecuritySchemeDefinition {
-    pub(crate) scheme: SecurityScheme,
+pub struct SecuritySchemeDefinition {
+    pub scheme: SecurityScheme,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub(crate) struct OneOrMany<T>(pub(crate) Vec<T>);
+pub struct OneOrMany<T>(pub Vec<T>);
 
 impl<T> AsRef<[T]> for OneOrMany<T> {
     fn as_ref(&self) -> &[T] {
@@ -114,47 +114,47 @@ impl<T> From<T> for OneOrMany<T> {
 }
 
 #[derive(Debug, Default, Eq, PartialEq, Deserialize)]
-pub(crate) struct PartialInteractionAffordance {
+pub struct PartialInteractionAffordance {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub(crate) forms: Vec<Form>,
+    pub forms: Vec<Form>,
 }
 
 #[derive(Debug, Default, Eq, PartialEq, Deserialize)]
-pub(crate) struct InteractionAffordance {
+pub struct InteractionAffordance {
     #[serde(flatten)]
-    pub(crate) interaction: PartialInteractionAffordance,
+    pub interaction: PartialInteractionAffordance,
     #[serde(flatten)]
-    pub(crate) human_readable: HumanReadable,
+    pub human_readable: HumanReadable,
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct PropertyAffordance {
+pub struct PropertyAffordance {
     #[serde(flatten)]
-    pub(crate) interaction: PartialInteractionAffordance,
+    pub interaction: PartialInteractionAffordance,
     #[serde(flatten)]
-    pub(crate) data_schema: PartialDataSchema,
+    pub data_schema: PartialDataSchema,
     #[serde(flatten)]
-    pub(crate) human_readable: HumanReadable,
+    pub human_readable: HumanReadable,
 }
 
 #[derive(Debug, Default, Deserialize)]
-pub(crate) struct ActionAffordance {
+pub struct ActionAffordance {
     #[serde(flatten)]
-    pub(crate) interaction: InteractionAffordance,
+    pub interaction: InteractionAffordance,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) input: Option<DataSchema>,
+    pub input: Option<DataSchema>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) output: Option<DataSchema>,
+    pub output: Option<DataSchema>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) synchronous: Option<bool>,
+    pub synchronous: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize)]
-pub(crate) struct EventAffordance {
+pub struct EventAffordance {
     #[serde(flatten)]
-    pub(crate) interaction: InteractionAffordance,
+    pub interaction: InteractionAffordance,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) data: Option<DataSchema>,
+    pub data: Option<DataSchema>,
 }
 
 impl Form {
@@ -258,49 +258,49 @@ impl PartialEq for EventAffordance {
 }
 
 #[derive(Debug, Default, Eq, PartialEq, Deserialize)]
-pub(crate) struct HumanReadable {
+pub struct HumanReadable {
     #[serde(rename = "@type", skip_serializing_if = "CowStr::is_empty", default)]
-    pub(crate) attype: CowStr,
+    pub attype: CowStr,
     #[serde(skip_serializing_if = "CowStr::is_empty", default)]
-    pub(crate) title: CowStr,
+    pub title: CowStr,
     #[serde(skip_serializing_if = "CowStr::is_empty", default)]
-    pub(crate) description: CowStr,
+    pub description: CowStr,
 }
 
 #[derive(Debug, Eq, PartialEq, Deserialize)]
-pub(crate) struct Form {
-    pub(crate) href: CowStr,
+pub struct Form {
+    pub href: CowStr,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) op: Option<OneOrMany<Operation>>,
+    pub op: Option<OneOrMany<Operation>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) subprotocol: Option<CowStr>,
+    pub subprotocol: Option<CowStr>,
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
-pub(crate) struct DataSchema {
+pub struct DataSchema {
     #[serde(flatten)]
-    pub(crate) data_schema: PartialDataSchema,
+    pub data_schema: PartialDataSchema,
     #[serde(flatten)]
-    pub(crate) human_readable: HumanReadable,
+    pub human_readable: HumanReadable,
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct PartialDataSchema {
+pub struct PartialDataSchema {
     #[serde(flatten)]
-    pub(crate) subtype: DataSchemaSubtype,
+    pub subtype: DataSchemaSubtype,
     #[serde(skip_serializing_if = "CowStr::is_empty", default)]
-    pub(crate) unit: CowStr,
-    pub(crate) read_only: Option<bool>,
-    pub(crate) write_only: Option<bool>,
+    pub unit: CowStr,
+    pub read_only: Option<bool>,
+    pub write_only: Option<bool>,
     #[serde(default)]
-    pub(crate) observable: bool,
+    pub observable: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct PartialDataSchemaDefaults {
-    pub(crate) read_only: &'static Option<bool>,
-    pub(crate) write_only: &'static Option<bool>,
+pub struct PartialDataSchemaDefaults {
+    pub read_only: &'static Option<bool>,
+    pub write_only: &'static Option<bool>,
 }
 
 impl Default for PartialDataSchemaDefaults {
@@ -313,11 +313,7 @@ impl Default for PartialDataSchemaDefaults {
 }
 
 impl PartialDataSchema {
-    pub(crate) fn is_equivalent(
-        &self,
-        other: &Self,
-        defaults: Option<PartialDataSchemaDefaults>,
-    ) -> bool {
+    pub fn is_equivalent(&self, other: &Self, defaults: Option<PartialDataSchemaDefaults>) -> bool {
         self.subtype.is_equivalent(&other.subtype)
             && self.unit == other.unit
             && defaults
@@ -332,7 +328,7 @@ impl PartialDataSchema {
 }
 
 impl DataSchema {
-    pub(crate) fn is_equivalent(&self, other: &Self) -> bool {
+    pub fn is_equivalent(&self, other: &Self) -> bool {
         self.data_schema.is_equivalent(&other.data_schema, None)
             && self.human_readable == other.human_readable
     }
@@ -348,7 +344,7 @@ fn are_equivalent_opt_data_schema(left: &Option<DataSchema>, right: &Option<Data
 
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
-pub(crate) enum DataSchemaSubtype {
+pub enum DataSchemaSubtype {
     Object(ObjectDataSchema),
     Array,
     String,
@@ -374,27 +370,27 @@ impl DataSchemaSubtype {
 }
 
 #[derive(Debug, Default, Eq, PartialEq, Deserialize)]
-pub(crate) struct IntegerDataSchema {
+pub struct IntegerDataSchema {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) minimum: Option<i64>,
+    pub minimum: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) maximum: Option<i64>,
+    pub maximum: Option<i64>,
 }
 
 #[derive(Debug, Default, PartialEq, Deserialize)]
-pub(crate) struct NumberDataSchema {
+pub struct NumberDataSchema {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) minimum: Option<f64>,
+    pub minimum: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) maximum: Option<f64>,
+    pub maximum: Option<f64>,
 }
 
 #[derive(Debug, Default, PartialEq, Deserialize)]
-pub(crate) struct ObjectDataSchema {
+pub struct ObjectDataSchema {
     #[serde(skip_serializing_if = "HashMap::is_empty")]
-    pub(crate) properties: HashMap<CowStr, DataSchema>,
+    pub properties: HashMap<CowStr, DataSchema>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub(crate) required: Vec<CowStr>,
+    pub required: Vec<CowStr>,
 }
 
 impl ObjectDataSchema {
@@ -415,7 +411,7 @@ impl ObjectDataSchema {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum Operation {
+pub enum Operation {
     ReadProperty,
     WriteProperty,
     ObserveProperty,

@@ -1,13 +1,13 @@
 mod lamp;
-mod td;
 mod tester;
 
 use std::borrow::Cow;
 
 use clap::{Parser, ValueEnum};
 use stable_eyre::eyre;
-use tester::Tester;
 use tracing::info;
+
+use crate::tester::Tester;
 
 #[derive(Debug, Parser)]
 struct Cli {
