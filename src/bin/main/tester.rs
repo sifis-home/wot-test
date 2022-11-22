@@ -70,66 +70,66 @@ impl Tester {
     ) -> eyre::Result<()> {
         use lamp::*;
 
-        macro_rules! check_no_incoming_messages {
-            ($fut:expr) => {
-                check_no_incoming_messages($fut, &mut receiver)
+        let no_messages_checks = async {
+            let (status, _, lamp) = self
+                .request(Method::GET, ".well-known/wot")
+                .json::<ThingDescription>()
+                .await?;
+            ensure!(
+                status == StatusCode::OK,
+                "Expected OK status code, got {status}",
+            );
+            ensure!(
+                lamp == *crate::lamp::DESCRIPTION,
+                "Invalid lamp. Expected:\n{:#?}\nObtained:\n{:#?}",
+                *crate::lamp::DESCRIPTION,
+                lamp,
+            );
+            info!("Got lamp TD from .well-known/wot");
+
+            #[derive(Debug, Eq, PartialEq, Deserialize)]
+            struct Props {
+                brightness: crate::lamp::Brightness,
+                on: crate::lamp::Status,
+            }
+
+            let (status, _, props) = self
+                .request(Method::GET, "properties")
+                .json::<Props>()
+                .await?;
+            ensure!(
+                status == StatusCode::OK,
+                "Expected OK status code, got {status}",
+            );
+            const EXPECTED_PROPS: Props = Props {
+                brightness: 50,
+                on: true,
             };
-        }
+            ensure!(
+                props == EXPECTED_PROPS,
+                "Invalid lamp props. Expected:\n{:#?}\nObtained:\n{:#?}",
+                EXPECTED_PROPS,
+                props,
+            );
+            info!("Lamp is correctly on with brightness 50");
 
-        let (status, _, lamp) = check_no_incoming_messages!(self
-            .request(Method::GET, ".well-known/wot")
-            .json::<ThingDescription>())
-        .await??;
-        ensure!(
-            status == StatusCode::OK,
-            "Expected OK status code, got {status}",
-        );
-        ensure!(
-            lamp == *crate::lamp::DESCRIPTION,
-            "Invalid lamp. Expected:\n{:#?}\nObtained:\n{:#?}",
-            *crate::lamp::DESCRIPTION,
-            lamp,
-        );
-        info!("Got lamp TD from .well-known/wot");
+            let (status, _, brightness) = self
+                .request(Method::GET, "properties/brightness")
+                .json::<Brightness>()
+                .await?;
+            ensure!(
+                status == StatusCode::OK,
+                "Expected OK status code, got {status}",
+            );
+            ensure!(
+                brightness == 50,
+                "Invalid lamp brightness. Expected 50, got {brightness}",
+            );
+            info!("Lamp brightness is 50 as expected");
 
-        #[derive(Debug, Eq, PartialEq, Deserialize)]
-        struct Props {
-            brightness: crate::lamp::Brightness,
-            on: crate::lamp::Status,
-        }
-
-        let (status, _, props) =
-            check_no_incoming_messages!(self.request(Method::GET, "properties").json::<Props>())
-                .await??;
-        ensure!(
-            status == StatusCode::OK,
-            "Expected OK status code, got {status}",
-        );
-        const EXPECTED_PROPS: Props = Props {
-            brightness: 50,
-            on: true,
+            Ok(())
         };
-        ensure!(
-            props == EXPECTED_PROPS,
-            "Invalid lamp props. Expected:\n{:#?}\nObtained:\n{:#?}",
-            EXPECTED_PROPS,
-            props,
-        );
-        info!("Lamp is correctly on with brightness 50");
-
-        let (status, _, brightness) = check_no_incoming_messages!(self
-            .request(Method::GET, "properties/brightness")
-            .json::<Brightness>())
-        .await??;
-        ensure!(
-            status == StatusCode::OK,
-            "Expected OK status code, got {status}",
-        );
-        ensure!(
-            brightness == 50,
-            "Invalid lamp brightness. Expected 50, got {brightness}",
-        );
-        info!("Lamp brightness is 50 as expected");
+        check_no_incoming_messages(no_messages_checks, &mut receiver).await??;
 
         let brightness_set_fut = async {
             let (status, _) = self
@@ -181,9 +181,11 @@ impl Tester {
 
         info!("Lamp brightness successfully set to 25 and relative events have been received");
 
-        let (status, _, brightness) = check_no_incoming_messages!(self
-            .request(Method::GET, "properties/brightness")
-            .json::<Brightness>())
+        let (status, _, brightness) = check_no_incoming_messages(
+            self.request(Method::GET, "properties/brightness")
+                .json::<Brightness>(),
+            &mut receiver,
+        )
         .await??;
         ensure!(
             status == StatusCode::OK,
