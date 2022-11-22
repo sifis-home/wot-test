@@ -1,6 +1,6 @@
 use once_cell::sync::Lazy;
 
-use crate::td::{
+use wot_test::td::{
     ActionAffordance, DataSchema, DataSchemaSubtype, EventAffordance, Form, HumanReadable,
     IntegerDataSchema, InteractionAffordance, ObjectDataSchema, OneOrMany, Operation,
     PartialDataSchema, PartialInteractionAffordance, PropertyAffordance, SecurityScheme,

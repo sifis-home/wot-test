@@ -16,10 +16,9 @@ use stable_eyre::eyre::{self, bail, ensure, eyre, Context};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
+use wot_test::tester::{ActionResponse, ActionResponseStatus};
 
-use crate::tester::ActionResponseStatus;
-
-use super::{ActionResponse, Tester};
+use super::Tester;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Message {
