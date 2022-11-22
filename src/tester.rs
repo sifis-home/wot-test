@@ -6,8 +6,8 @@ use std::{fmt, future::IntoFuture, ops::Not};
 
 use futures_util::{future::BoxFuture, FutureExt};
 use http_api_problem::HttpApiProblem;
-use reqwest::{header::HeaderMap, RequestBuilder, StatusCode};
-use serde::Deserialize;
+use reqwest::{header::HeaderMap, Client, Method, RequestBuilder, StatusCode};
+use serde::{Deserialize, Serialize};
 use stable_eyre::eyre::{self, bail, eyre};
 use time::OffsetDateTime;
 use tokio::{select, sync::mpsc};
@@ -102,5 +102,38 @@ impl IntoFuture for RequestHandler {
             Ok((status, headers))
         }
         .boxed()
+    }
+}
+
+pub trait Requester {
+    fn host(&self) -> &str;
+    fn port(&self) -> Option<u16>;
+    fn client(&self) -> &Client;
+
+    #[inline]
+    fn request(&self, method: Method, endpoint: &str) -> RequestHandler {
+        let request = self.create_request(method, endpoint);
+        RequestHandler::new(request)
+    }
+
+    #[inline]
+    fn request_with_json<T>(&self, method: Method, endpoint: &str, body: &T) -> RequestHandler
+    where
+        T: Serialize + Sized,
+    {
+        let request = self.create_request(method, endpoint).json(body);
+        RequestHandler::new(request)
+    }
+
+    fn create_request(&self, method: Method, endpoint: &str) -> RequestBuilder {
+        use fmt::Write;
+
+        let mut url = format!("http://{}", self.host());
+        if let Some(port) = self.port() {
+            write!(url, ":{}", port).unwrap();
+        }
+        write!(url, "/{}", endpoint.trim_start_matches('/')).unwrap();
+
+        self.client().request(method, url)
     }
 }

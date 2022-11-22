@@ -10,7 +10,7 @@ use std::{
 
 use futures_util::{pin_mut, StreamExt};
 use http_api_problem::StatusCode;
-use reqwest::{header::LOCATION, Client, Method, RequestBuilder};
+use reqwest::{header::LOCATION, Client, Method};
 use serde::{Deserialize, Serialize};
 use stable_eyre::eyre::{self, bail, ensure, eyre};
 use tokio::{
@@ -23,9 +23,7 @@ use wot_test::{
     td::{
         DataSchemaSubtype, Form, IntegerDataSchema, NumberDataSchema, Operation, ThingDescription,
     },
-    tester::{
-        self, check_no_incoming_messages, ActionResponse, ActionResponseStatus, RequestHandler,
-    },
+    tester::{self, check_no_incoming_messages, ActionResponse, ActionResponseStatus, Requester},
 };
 
 use crate::{lamp::Brightness, tester::lamp::handle_lamp_event_result, WotTest};
@@ -1085,29 +1083,21 @@ impl Tester {
 
         Ok((brightness_form, initial_brightness))
     }
+}
 
-    fn request(&self, method: Method, endpoint: &str) -> RequestHandler {
-        let request = self.create_request(method, endpoint);
-        RequestHandler::new(request)
+impl Requester for Tester {
+    #[inline]
+    fn host(&self) -> &str {
+        &self.host
     }
 
-    fn request_with_json<T>(&self, method: Method, endpoint: &str, body: &T) -> RequestHandler
-    where
-        T: Serialize + Sized,
-    {
-        let request = self.create_request(method, endpoint).json(body);
-        RequestHandler::new(request)
+    #[inline]
+    fn port(&self) -> Option<u16> {
+        self.port
     }
 
-    fn create_request(&self, method: Method, endpoint: &str) -> RequestBuilder {
-        use fmt::Write;
-
-        let mut url = format!("http://{}", self.host);
-        if let Some(port) = self.port {
-            write!(url, ":{}", port).unwrap();
-        }
-        write!(url, "/{}", endpoint.trim_start_matches('/')).unwrap();
-
-        self.client.request(method, url)
+    #[inline]
+    fn client(&self) -> &Client {
+        &self.client
     }
 }
