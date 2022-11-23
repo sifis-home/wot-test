@@ -542,8 +542,10 @@ fn eq_opt_http_api_problem(a: &Option<HttpApiProblem>, b: &Option<HttpApiProblem
     }
 }
 
+type ActionToHandle = Option<Result<(StatusCode, HeaderMap, ActionResponse<Fade>), reqwest::Error>>;
+
 pub(super) fn handle_next_polled_action(
-    action: Option<eyre::Result<(StatusCode, HeaderMap, ActionResponse<Fade>)>>,
+    action: ActionToHandle,
     action_status: &mut PolledActionStatus,
 ) -> eyre::Result<()> {
     let (status, _, action_response) = match action {
