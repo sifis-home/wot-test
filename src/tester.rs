@@ -8,7 +8,6 @@ use futures_util::{future::BoxFuture, FutureExt};
 use http_api_problem::HttpApiProblem;
 use reqwest::{header::HeaderMap, Client, Method, RequestBuilder, StatusCode};
 use serde::{Deserialize, Serialize};
-use stable_eyre::eyre::{self, bail, ensure, eyre};
 use time::OffsetDateTime;
 use tokio::{select, sync::mpsc};
 
@@ -39,9 +38,8 @@ pub enum ActionResponseStatus {
 pub async fn check_no_incoming_messages<T, F>(
     fut: F,
     receiver: &mut mpsc::Receiver<T>,
-) -> eyre::Result<F::Output>
+) -> Result<F::Output, IncomingMessageError<T>>
 where
-    T: fmt::Debug,
     F: IntoFuture,
 {
     let fut = fut.into_future();
@@ -52,14 +50,35 @@ where
 
         received = receiver.recv() => {
             match received {
-                Some(message) => Err(eyre!(
-                    "Message from event handler received when nothing was expected: {message:?}"
-                )),
-                None => Err(eyre!("Channel from event handler closed unexpectedly")),
+                Some(message) => Err(IncomingMessageError::UnexpectedMessage(message)),
+                None => Err(IncomingMessageError::ChannelClosed),
             }
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
+pub enum IncomingMessageError<T> {
+    UnexpectedMessage(T),
+    ChannelClosed,
+}
+
+impl<T> fmt::Display for IncomingMessageError<T>
+where
+    T: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnexpectedMessage(message) => write!(
+                f,
+                "Message from event handler received when nothing was expected: {message:?}"
+            ),
+            Self::ChannelClosed => f.write_str("Channel from event handler closed unexpectedly"),
+        }
+    }
+}
+
+impl<T> std::error::Error for IncomingMessageError<T> where T: fmt::Debug {}
 
 pub struct RequestHandler {
     request: RequestBuilder,
@@ -73,7 +92,7 @@ impl RequestHandler {
         }
     }
 
-    pub async fn json<T>(self) -> eyre::Result<(StatusCode, HeaderMap, T)>
+    pub async fn json<T>(self) -> Result<(StatusCode, HeaderMap, T), reqwest::Error>
     where
         T: for<'de> Deserialize<'de>,
     {
@@ -87,7 +106,7 @@ impl RequestHandler {
 }
 
 impl IntoFuture for RequestHandler {
-    type Output = eyre::Result<(StatusCode, HeaderMap)>;
+    type Output = Result<(StatusCode, HeaderMap), IntoFutureError>;
     type IntoFuture = BoxFuture<'static, Self::Output>;
 
     fn into_future(self) -> Self::IntoFuture {
@@ -99,13 +118,36 @@ impl IntoFuture for RequestHandler {
 
             if output.is_empty().not() {
                 let output = String::from_utf8_lossy(&output);
-                bail!("expected empty response, obtained: {output}");
+                return Err(IntoFutureError::NotEmpty(output.into_owned()));
             }
             Ok((status, headers))
         }
         .boxed()
     }
 }
+
+#[derive(Debug)]
+pub enum IntoFutureError {
+    Reqwest(reqwest::Error),
+    NotEmpty(String),
+}
+
+impl From<reqwest::Error> for IntoFutureError {
+    fn from(error: reqwest::Error) -> Self {
+        Self::Reqwest(error)
+    }
+}
+
+impl fmt::Display for IntoFutureError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Reqwest(reqwest) => write!(f, "Reqwest error: {reqwest}"),
+            Self::NotEmpty(s) => write!(f, "Expected empty response, obtained: {s}"),
+        }
+    }
+}
+
+impl std::error::Error for IntoFutureError {}
 
 pub trait Requester {
     fn host(&self) -> &str;
@@ -140,7 +182,11 @@ pub trait Requester {
     }
 }
 
-pub async fn test_property<R, T>(requester: &R, form: &Form, value: &T) -> eyre::Result<()>
+pub async fn test_property<'a, R, T>(
+    requester: &R,
+    form: &Form,
+    value: &'a T,
+) -> Result<(), TestPropertyError<'a, T>>
 where
     R: Requester,
     T: Serialize + Sized + PartialEq + fmt::Debug + for<'de> Deserialize<'de>,
@@ -148,24 +194,79 @@ where
     let (status, _) = requester
         .request_with_json(Method::PUT, &form.href, value)
         .await?;
-    ensure!(
-        status == StatusCode::NO_CONTENT,
-        "Expected NO_CONTENT status code, got {status}",
-    );
+    if status != StatusCode::NO_CONTENT {
+        return Err(TestPropertyError::IncorrectPutStatus(status));
+    }
 
     let (status, _, read) = requester
         .request(Method::GET, &form.href)
         .json::<T>()
         .await?;
-    ensure!(
-        status == StatusCode::OK,
-        "Expected OK status code, got {status}",
-    );
+    if status != StatusCode::OK {
+        return Err(TestPropertyError::IncorrectGetStatus(status));
+    }
 
-    ensure!(
-        read == *value,
-        "Value not set correctly, got {read:?} instead of {value:?}",
-    );
+    if read == *value {
+        Ok(())
+    } else {
+        Err(TestPropertyError::IncorrectValue {
+            expected: value,
+            found: read,
+        })
+    }
+}
 
-    Ok(())
+#[derive(Debug)]
+pub enum TestPropertyError<'a, T> {
+    IncorrectPutStatus(StatusCode),
+    IncorrectGetStatus(StatusCode),
+    IncorrectValue { expected: &'a T, found: T },
+    Reqwest(reqwest::Error),
+    NotEmpty(String),
+}
+
+impl<T> fmt::Display for TestPropertyError<'_, T>
+where
+    T: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::IncorrectPutStatus(status) => {
+                write!(
+                    f,
+                    "Expected NO_CONTENT status code from PUT request, got {status}"
+                )
+            }
+            Self::IncorrectGetStatus(status) => {
+                write!(f, "Expected OK status code from GET request, got {status}")
+            }
+            Self::IncorrectValue { expected, found } => {
+                write!(
+                    f,
+                    "Value not set correctly, got {found:?} instead of {expected:?}"
+                )
+            }
+            Self::Reqwest(error) => write!(f, "Reqwest error: {error}"),
+            Self::NotEmpty(s) => {
+                write!(f, "Expected empty response from PUT request, obtained: {s}")
+            }
+        }
+    }
+}
+
+impl<T> std::error::Error for TestPropertyError<'_, T> where T: fmt::Debug {}
+
+impl<T> From<reqwest::Error> for TestPropertyError<'_, T> {
+    fn from(error: reqwest::Error) -> Self {
+        Self::Reqwest(error)
+    }
+}
+
+impl<T> From<IntoFutureError> for TestPropertyError<'_, T> {
+    fn from(error: IntoFutureError) -> Self {
+        match error {
+            IntoFutureError::Reqwest(x) => Self::Reqwest(x),
+            IntoFutureError::NotEmpty(x) => Self::NotEmpty(x),
+        }
+    }
 }
