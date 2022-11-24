@@ -1,3 +1,5 @@
+//! A set of testing utilities.
+
 mod poller;
 
 pub use poller::*;
@@ -13,28 +15,52 @@ use tokio::{select, sync::mpsc};
 
 use crate::td::Form;
 
+/// The response of an action.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActionResponse<T> {
+    /// The status.
     pub status: ActionResponseStatus,
+
+    /// The eventual output.
     pub output: Option<T>,
+
+    /// The eventual error.
     pub error: Option<HttpApiProblem>,
+
+    /// The eventual hyper-reference.
     pub href: Option<String>,
+
+    /// The time when the action has been requested.
     #[serde(with = "time::serde::iso8601::option", default)]
     pub time_requested: Option<OffsetDateTime>,
+
+    /// The time when the action ended.
     #[serde(with = "time::serde::iso8601::option", default)]
     pub time_ended: Option<OffsetDateTime>,
 }
 
+/// The status of an action response.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ActionResponseStatus {
+    /// The action is pending.
     Pending,
+
+    /// The action is running.
     Running,
+
+    /// The action is complete.
     Completed,
+
+    /// The action failed.
     Failed,
 }
 
+/// Checks whether no messages are received while awaiting a future.
+///
+/// This concurrently awaits the given future and listen for messages from the receiver. If a
+/// message is received from the channel before the future is awaited an error is returned.
 pub async fn check_no_incoming_messages<T, F>(
     fut: F,
     receiver: &mut mpsc::Receiver<T>,
@@ -57,9 +83,13 @@ where
     }
 }
 
+/// An error returned waiting for no incoming messages.
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub enum IncomingMessageError<T> {
+    /// A message has been unexpectedly received.
     UnexpectedMessage(T),
+
+    /// The channel is closed.
     ChannelClosed,
 }
 
@@ -80,11 +110,15 @@ where
 
 impl<T> std::error::Error for IncomingMessageError<T> where T: fmt::Debug {}
 
+/// A helper to ease the requests to a WoT thing.
+///
+/// This wrapper can be directly awaited.
 pub struct RequestHandler {
     request: RequestBuilder,
 }
 
 impl RequestHandler {
+    /// Creates a new request handler.
     #[inline]
     pub fn new(request_builder: RequestBuilder) -> Self {
         Self {
@@ -92,6 +126,7 @@ impl RequestHandler {
         }
     }
 
+    /// Performs the request deserializing a JSON response.
     pub async fn json<T>(self) -> Result<(StatusCode, HeaderMap, T), reqwest::Error>
     where
         T: for<'de> Deserialize<'de>,
@@ -126,9 +161,13 @@ impl IntoFuture for RequestHandler {
     }
 }
 
+/// An error while converting a [`RequestHandler`] into a `Future`.
 #[derive(Debug)]
 pub enum IntoFutureError {
+    /// An error from `reqwest`.
     Reqwest(reqwest::Error),
+
+    /// The output is unexpectedly not empty.
     NotEmpty(String),
 }
 
@@ -149,17 +188,27 @@ impl fmt::Display for IntoFutureError {
 
 impl std::error::Error for IntoFutureError {}
 
+/// A helper trait to perform requests.
+///
+/// Just implement `host`, `port` and `client` and you can use `request*` helper functions.
 pub trait Requester {
+    /// The target host for the requests.
     fn host(&self) -> &str;
+
+    /// The target port for the requests.
     fn port(&self) -> Option<u16>;
+
+    /// The `reqwest` client.
     fn client(&self) -> &Client;
 
+    /// Creates a request handler.
     #[inline]
     fn request(&self, method: Method, endpoint: &str) -> RequestHandler {
         let request = self.create_request(method, endpoint);
         RequestHandler::new(request)
     }
 
+    /// Creates a request handler given the body to be sent.
     #[inline]
     fn request_with_json<T>(&self, method: Method, endpoint: &str, body: &T) -> RequestHandler
     where
@@ -169,6 +218,7 @@ pub trait Requester {
         RequestHandler::new(request)
     }
 
+    /// Creates a new request builder given the endpoint.
     fn create_request(&self, method: Method, endpoint: &str) -> RequestBuilder {
         use fmt::Write;
 
@@ -182,6 +232,9 @@ pub trait Requester {
     }
 }
 
+/// Tests the behavior of a Thing property.
+///
+/// This sets the value of the property to the one given, then gets the new value back and it checks if it is equal to the original one.
 pub async fn test_property<'a, R, T>(
     requester: &R,
     form: &Form,
@@ -216,12 +269,28 @@ where
     }
 }
 
+/// An error encountered while testing a Thing property.
 #[derive(Debug)]
 pub enum TestPropertyError<'a, T> {
+    /// The status code from the PUT request is incorrect.
     IncorrectPutStatus(StatusCode),
+
+    /// The status code from the GET request is incorrect.
     IncorrectGetStatus(StatusCode),
-    IncorrectValue { expected: &'a T, found: T },
+
+    /// The value obtained from the GET request is incorrect.
+    IncorrectValue {
+        /// The expected value.
+        expected: &'a T,
+
+        /// The obtained value.
+        found: T,
+    },
+
+    /// An error from [`reqwest`].
     Reqwest(reqwest::Error),
+
+    /// An empty string was expected.
     NotEmpty(String),
 }
 

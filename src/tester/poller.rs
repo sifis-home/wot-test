@@ -9,6 +9,13 @@ use std::{
 use futures_util::{future::LocalBoxFuture, FutureExt, Stream};
 use tokio::time::{self, MissedTickBehavior};
 
+/// Periodically calls a function and subsequently await a future.
+///
+/// Creates a [`Poller`] async iterator (a.k.a. stream) that continuously calls `f`, awaits the
+/// returning future, returns the value and waits `period`.
+///
+/// This function is handy to poll the state of a Thing component that does not support observation
+/// or subscription (i.e: a pending or running action).
 pub fn poll<'a, F, T, Fut>(period: Duration, f: F) -> Poller<'a, F, T>
 where
     F: FnMut() -> Fut,
@@ -31,6 +38,9 @@ fn create_tick_future(mut interval: time::Interval) -> LocalBoxFuture<'static, t
     .boxed_local()
 }
 
+/// An async iterator that continuously poll using an async function.
+///
+/// See [`poll`] for more information.
 pub struct Poller<'a, F, T> {
     tick: LocalBoxFuture<'static, time::Interval>,
     inner: Inner<'a, F, T>,
