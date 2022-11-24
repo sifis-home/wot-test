@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::HashMap, ops::Deref};
 use serde::{Deserialize, Deserializer};
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize)]
-pub struct CowStr(Cow<'static, str>);
+pub struct CowStr(pub Cow<'static, str>);
 
 impl From<&'static str> for CowStr {
     fn from(s: &'static str) -> Self {
